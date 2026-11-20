@@ -33,7 +33,9 @@ function startProg(ground, mode, bio = 0) {
   progs[key] = { pr, fs, ready: false };
 }
 // start compiling every shader a planet's scenarios need, before they are asked for
-function warm(w) { if (glOK) w.scenarios.forEach(sc => [0, 1].forEach(m => { startProg(GROUND_ID[sc.ground], m); if (sc.ground === "ocean" && sc.atm) startProg(3, m, 1); })); setTimeout(prewarm, 60); }
+// Without KHR_parallel_shader_compile (Safari) every compile blocks the page until it finishes, so nothing is compiled ahead: each world's
+// program is built when it is first drawn, behind the "Drawing…" note, instead of all of a planet's worlds freezing the page at once.
+function warm(w) { if (glOK && !pcx) return; if (glOK) w.scenarios.forEach(sc => [0, 1].forEach(m => { startProg(GROUND_ID[sc.ground], m); if (sc.ground === "ocean" && sc.atm) startProg(3, m, 1); })); setTimeout(prewarm, 60); }
 function prewarm() {   // the GPU finishes a program the first time it draws: do that with one pixel, while nothing else is happening
   if (!glOK) return; let left = 0;
   for (const P of Object.values(progs)) { if (P.warmed || P.failed) continue;
@@ -256,8 +258,11 @@ function drawGL(time, jit = [0, 0], scale = 1, strip = null, s = scene, probe = 
   if (!glOK || !s) return false;
   const sc = s.sc, Lt = s.Lt, rc = s.rc, A = s.alb;
   // animals are placed once per spot, by a small ground-only pass that asks the shader for heights (render-fauna.js), then drawn in 2D
-  if (!probe && s.lifeWant && !s.fauna) { const c = FAUNA_CACHE.get(s.faunaKey); if (c) s.fauna = c; else if (!drawGL(time, jit, scale, null, s, true)) return false; }
-  const bio = sc.ground === "ocean" && !!sc.atm && dial >= 3 && life >= 1 ? 1 : 0;   // biology has its own, heavier program (it also hosts the animals' probe); everything else stays lean
+  // where animals and painted plants stand is worked out after the landscape is drawn, a slice per frame (placeFaunaSoon, render-views.js):
+  // done here in one go it asked the GPU ~50 questions in a row, each waited for, which froze a phone for about 3 s
+  if (!probe && s.lifeWant && !s.fauna) { const c = FAUNA_CACHE.get(s.faunaKey); if (c) s.fauna = c; else s.faunaPending = true; }
+  let bio = sc.ground === "ocean" && !!sc.atm && dial >= 3 && life >= 1 ? 1 : 0;   // biology has its own, heavier program (it also hosts the animals' probe); everything else stays lean
+  if (bio) { const P = progs[GROUND_ID[sc.ground] * 2 + (s.close ? 1 : 0) + 64]; if (P && P.failed) { bio = 0; s.bioFailed = true; } }   // a device that cannot build it: the world without its imagined life
   if (!useProg(GROUND_ID[sc.ground], s.close ? 1 : 0, bio)) return false;
   if (texScene !== s) { uploadTextures(s); texScene = s; }
   const vw = Math.round(glc.width * scale), vh = Math.round(glc.height * scale);

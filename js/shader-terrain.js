@@ -309,7 +309,7 @@ float gTBest = 1e5;
 #define PLANTS (uTDen > 0. || uCan1.x > 0.)
 #define PTOP max(uTTop, uCan1.x > 0. ? uCan1.z * 1.6 + 1. : 0.)
 #define PRANGE max(uTRange, uCan1.x > 0. ? 400. : 0.)
-vec4 gC0 = vec4(1e5), gC1 = vec4(1e5), gC2 = vec4(1e5), gP0 = vec4(0.), gP1 = vec4(0.), gP2 = vec4(0.); vec3 gI = vec3(0.);
+vec4 gC[3], gP[3]; float gIc[3];   // per grid: the cell last set up, its plant, its id (set to "none" at the start of main)
 float gTReal = 0., gTExit = 1e5; vec3 gRd = vec3(0., 1., 0.);   // gRd: the ray being marched, so a step can jump straight to the next cell
 float plantCell(vec3 p, int k, float S, vec2 off, inout vec4 C, inout vec4 P, inout float idc) {
   vec2 g = (p.xz + off) / S, cid = floor(g), fr = g - cid;
@@ -335,46 +335,20 @@ float plantCell(vec3 p, int k, float S, vec2 off, inout vec4 C, inout vec4 P, in
   if (d < gTBest) { gTBest = d; gTPart = part; gTTy = P.z; gTH = P.w; gTq = q; gTId = idc; }
   return d;
 }
+// one plantCell call site in a loop over the three grids: every call site is a full inlined copy of the plant code and of the ground
+// height under it, which phone GPU compilers took tens of seconds over (or gave up on)
 float trees(vec3 p) {
   gTExit = 1e5; gTBest = 1e5; float d = 1e5;
-  if (uTDen > 0.) d = plantCell(p, 0, uTS, vec2(0.), gC0, gP0, gI.x);
-  if (uCan1.x > 0. && dot(p.xz, p.xz) < 400. * 400.) { float S = uCan1.y * 1.25;
-    d = min(d, plantCell(p, 1, S, vec2(0.), gC1, gP1, gI.y)); d = min(d, plantCell(p, 2, S, vec2(0.5 * S, 0.31 * S), gC2, gP2, gI.z)); }
+  bool can = uCan1.x > 0. && dot(p.xz, p.xz) < 400. * 400.; float S = uCan1.y * 1.25;
+  for (int k = 0; k < 3; k++) {
+    if (k == 0 ? uTDen <= 0. : !can) continue;
+    vec4 C = gC[k], P = gP[k]; float idc = gIc[k];
+    d = min(d, plantCell(p, k, k == 0 ? uTS : S, k == 2 ? vec2(0.5 * S, 0.31 * S) : vec2(0.), C, P, idc));
+    gC[k] = C; gP[k] = P; gIc[k] = idc; }
   gTReal = d < 1e4 ? 1. : 0.;
   return d;
 }
 #endif
-float march(vec3 ro, vec3 rd, out float mat) {
-  float t = 0.05; mat = 0.;
-  for (int i = 0; i < 220; i++) {
-    if (uMode > 0.5 && i > 150) break;
-    vec3 p = ro + rd * t; float m; gY = p.y; float h = H(p.xz, m); gY = -1e9;
-    float d = p.y - h, sf = uMode > 0.5 ? 0.3 : 0.45, lim = 1e5;
-#if BIO
-    if (uMode < 0.5 && PLANTS && d < PTOP && t < PRANGE) { gRd = rd; float dt = trees(p); lim = gTExit; if (dt < d) { d = dt; m = 7. + gTPart; sf = 0.8; } }   // plants are tested only within reach of the ground, one cell at a time
-#endif
-    if (m > 5.5 && m < 6.5) sf = 0.25;   // the canopy's steep edges: short steps, or the rays overshoot into stripes
-    if (d < 0.0015 * t) { mat = m; return t; }
-    t += uMode > 0.5 ? max(0.001, d * sf) : min(max(0.008, d * sf), lim);
-    if (t > 16000.) break;
-  }
-  return -1.;
-}
-vec3 nrm(vec2 p, float t) { float e = max(0.004, t * 0.0015); float m;
-  return normalize(vec3(H(p - vec2(e, 0), m) - H(p + vec2(e, 0), m), 2. * e, H(p - vec2(0, e), m) - H(p + vec2(0, e), m))); }
-// soft shadows whose penumbra matches the star's angular size: crisp under a small star, blurred under a huge one
-float shadow(vec3 p, vec3 L, float rad) {
-  if (L.y < -0.05) return 0.;
-  float k = clamp(1. / tan(max(rad, 0.004)), 2., 60.), s0 = uMode > 0.5 ? 0.33 : 1.;   // close-up: skip millimetre bumps (the normals shade those)
-  float res = 1., t = 0.03 * s0; gD = -1.;
-  for (int i = 0; i < 64; i++) { vec3 q = p + L * t; float m; gY = q.y; float d = q.y - H(q.xz, m), ds = d; gY = -1e9;   // ds: step limit (a cell edge counts); d: only real plants cast shade
-#if BIO
-    if (uMode < 0.5 && PLANTS && d < PTOP && t < 70. && dot(q.xz, q.xz) < PRANGE * PRANGE) { gRd = L; float dt = trees(q); d = min(d, dt); ds = min(d, gTExit); }   // only nearby plants shade a spot
-#endif
-    res = min(res, 0.5 + 0.5 * k * d / t); if (res < 0.01) break; t += max(0.03 * s0, ds * (uMode > 0.5 ? 0.4 : 0.6)); if (t > (uMode > 0.5 ? 40. : 1500.)) break; }
-  gD = 0.;
-  return smoothstep(0., 1., clamp(res, 0., 1.));
-}
 vec3 skyTex(vec3 d) { float az = atan(d.x, d.z); float el = asin(clamp(d.y, -1., 1.));
   vec2 uv = vec2(az / 6.2831853 + 0.5, clamp((degrees(el) + 8.) / 98., 0.002, 0.998)); return pow(texture2D(uSky, uv).rgb, vec3(2.2)); }
 vec3 sunAdd(vec3 d) {
@@ -431,38 +405,138 @@ void main() {
   float cp = cos(uPitch), sp = sin(uPitch), cy = cos(uYaw), sy = sin(uYaw);
   float y1 = y * cp + z * sp, z1 = -y * sp + z * cp; float x2 = x * cy + z1 * sy, z2 = -x * sy + z1 * cy;
   vec3 rd = normalize(vec3(x2, y1, z2)); vec3 ro = vec3(0., uCamH, 0.);
-  if (uGround > 2.5 && uGround < 3.5 && uLand > 0.5 && uMode < 0.5) { float m0; gNoCan = 1.; ro.y += max(0., H(vec2(0.), m0) - 0.9); gNoCan = 0.; }   // inland: stand on the ground
+#if BIO
+  for (int k = 0; k < 3; k++) { gC[k] = vec4(1e5); gP[k] = vec4(0.); gIc[k] = 0.; }
+#endif
+  // ================= every ground-height and plant lookup, in one loop =================
+  // GLSL has no real function calls: a compiler pastes a full copy of the height function H (and of the plant code) at every place it is
+  // used. Used from ~35 places, that made the shader so large that phones froze for 3-6 s preparing each kind of world, and minutes (or
+  // failed) with life. So every lookup is a step of this one loop, in the same order as before (the march along the view ray, the water
+  // bottom, the surface normal, a plant's own normal, the shadow rays, ambient occlusion; or the probe for placing animals), and H and the
+  // plant code each appear once. Some shading reads what the last lookup left in globals (gRock, gEdge, the canopy and plant details), and
+  // keeping the order keeps the picture identical.
+  // jobs: 1 standing height inland, 2 probe points, 3 view-ray march, 4 water bottom, 5 terrain normal, 6 plant normal, 7 shadow ray, 9 AO
+  int job = uGround > 2.5 && uGround < 3.5 && uLand > 0.5 && uMode < 0.5 ? 1 : uProbe > 0.5 ? 2 : uUnknown > 0.5 ? 0 : 3;
+  int k = 0; bool water = false;
+  vec3 rdM = rd; float tM = 0.05, t = -1., mat = 0., tw = -1.;   // march
+  vec3 p = vec3(0.), n = vec3(0., 1., 0.), nn = vec3(0.), wv = vec3(0.); vec2 q = vec2(0.), qb = vec2(0.), pc = vec2(0.);   // hit point, normal, water
+  float e = 0., h0 = 0., hx = 0., hz = 0., eco = 0., dist = 0., tm = -1., depth = 0., path = 0., db = 0., mb = 0., rid = 0., o1 = 1., o2 = 1.;
+  vec3 so = vec3(0.), sL = vec3(0.); float sK = 0., sS0 = 1., sRes = 1., sT = 0., sh1 = 1., sh2 = 1.; int star = 1;   // shadow ray
+  for (int it = 0; it < 420; it++) {
+    if (job == 0) break;
+    // --- where to look up the ground
+    vec2 at = vec2(0.); bool needH = job != 6; float yAt = -1e9;
+    if (job == 1) { gNoCan = 1.; }
+    else if (job == 2) { gNoCan = 1.; if (k == 0) { float kk = floor(gl_FragCoord.x); vec4 a = anGet(floor(kk * 0.5)); pc = mod(kk, 2.) < 0.5 ? a.xy : a.zw; gEco = 0.; }
+      at = pc + (k == 1 ? vec2(1.5, 0.) : k == 2 ? vec2(0., 1.5) : vec2(0.)); }
+    else if (job == 3) { if ((uMode > 0.5 && k > 150) || k >= 220) { t = -1.; job = -3; needH = false; } else { vec3 pm = ro + rdM * tM; at = pm.xz; yAt = pm.y; } }
+    else if (job == 4) at = k == 0 ? q : qb;
+    else if (job == 5) at = p.xz + (k == 0 ? vec2(-e, 0.) : k == 1 ? vec2(e, 0.) : k == 2 ? vec2(0., -e) : vec2(0., e));
+    else if (job == 7) { if (k >= 64) { job = -7; needH = false; } else { vec3 qs = so + sL * sT; at = qs.xz; yAt = qs.y; } }
+    else if (job == 9) { float as = uMode > 0.5 ? 0.06 : 1.; at = p.xz + n.xz * (k == 0 ? 0.5 : 4.) * as; }
+    // --- the one place the height function is used
+    float hm = 0., h = 0.;
+    if (needH) { gY = yAt; h = H(at, hm); gY = -1e9; }
+#if BIO
+    // --- the one place the plant code is used: along the view ray and shadow rays near plants, and for a plant's own normal
+    float dt = 1e5; vec3 tp = vec3(0.), tRd = rdM; bool needT = false;
+    if (job == 3) { tp = ro + rdM * tM; needT = uMode < 0.5 && PLANTS && tp.y - h < PTOP && tM < PRANGE; }
+    else if (job == 7) { tp = so + sL * sT; tRd = sL; needT = uMode < 0.5 && PLANTS && tp.y - h < PTOP && sT < 70. && dot(tp.xz, tp.xz) < PRANGE * PRANGE; }
+    else if (job == 6) { vec3 o = k == 0 ? vec3(1., -1., -1.) : k == 1 ? vec3(-1., -1., 1.) : k == 2 ? vec3(-1., 1., -1.) : k == 3 ? vec3(1.) : vec3(0.); tp = p + o * e; needT = true; tRd = gRd; }
+    if (needT) { gRd = tRd; dt = trees(tp); }
+#endif
+    // --- what the lookup means for the job
+    if (job == 1) { ro.y += max(0., h - 0.9); gNoCan = 0.; job = uProbe > 0.5 ? 2 : uUnknown > 0.5 ? 0 : 3; k = -1; }
+    else if (job == 2) {
+      if (k == 0) { h0 = h; eco = gEco; } else if (k == 1) hx = h; else { hz = h; gNoCan = 0.;
+        vec3 tg = vec3(pc.x, max(h0, 0.) + uProbeTop, pc.y), dv = tg - ro; dist = length(dv); rdM = dv / dist; job = 3; k = -1; } }
+    else if (job == 3) {
+      vec3 pm = ro + rdM * tM; float d = pm.y - h, sf = uMode > 0.5 ? 0.3 : 0.45, lim = 1e5;
+#if BIO
+      if (needT) { lim = gTExit; if (dt < d) { d = dt; hm = 7. + gTPart; sf = 0.8; } }   // plants along the ray
+#endif
+      if (hm > 5.5 && hm < 6.5) sf = 0.25;   // the canopy's steep edges: short steps, or the rays overshoot into stripes
+      if (d < 0.0015 * tM) { mat = hm; t = tM; job = -3; }
+      else { tM += uMode > 0.5 ? max(0.001, d * sf) : min(max(0.008, d * sf), lim); if (tM > 16000.) { t = -1.; job = -3; } } }
+    else if (job == 4) {
+      if (k == 0) { depth = -h;
+        vec3 rr = refract(rd, n, 0.75); path = max(0., depth) / max(0.2, -rr.y);   // metres of water on the way to the bottom
+        qb = q + rr.xz * path; }
+      else { mb = hm; db = max(0., -h); so = p + vec3(0, 0.05, 0); sL = uS1Dir; sK = uS1Rad; star = 1; job = -6; } }
+    else if (job == 5) {
+      if (k == 0) h0 = h; else if (k == 1) hx = h; else if (k == 2) hz = h;
+      else { n = normalize(vec3(h0 - hx, 2. * e, hz - h)); gD = 0.;
+#if BIO
+        if (mat > 6.5) { job = 6; k = -1; nn = vec3(0.); e = 0.015 + t * 0.0006; }   // a plant: its normal from its own shape
+        else
+#endif
+        { so = p + n * (mat > 3.5 && mat < 4.5 || mat > 5.5 ? 0.8 : 0.02 * (uMode > 0.5 ? 0.1 : 1.)); sL = uS1Dir; sK = uS1Rad; star = 1; job = -6; } } }   // foliage: start the shadow ray clear of its own leaves
+#if BIO
+    else if (job == 6) {   // four corners of a tetrahedron, then the point itself (which leaves the plant's details set for shading)
+      vec3 o = k == 0 ? vec3(1., -1., -1.) : k == 1 ? vec3(-1., -1., 1.) : k == 2 ? vec3(-1., 1., -1.) : k == 3 ? vec3(1.) : vec3(0.); nn += o * dt;
+      if (k == 4) { n = normalize(nn); so = p + n * (mat > 3.5 && mat < 4.5 || mat > 5.5 ? 0.8 : 0.02 * (uMode > 0.5 ? 0.1 : 1.)); sL = uS1Dir; sK = uS1Rad; star = 1; job = -6; } }
+#endif
+    else if (job == 7) {   // soft shadows whose penumbra matches the star's angular size: crisp under a small star, blurred under a huge one
+      vec3 qs = so + sL * sT; float d = qs.y - h, ds = d;   // ds: step limit (a cell edge counts); d: only real surfaces
+#if BIO
+      if (needT) { d = min(d, dt); ds = min(d, gTExit); }   // only nearby plants cast shadows
+#endif
+      sRes = min(sRes, 0.5 + 0.5 * sK * d / sT);
+      if (sRes < 0.01) job = -7;
+      else { sT += max(0.03 * sS0, ds * (uMode > 0.5 ? 0.4 : 0.6)); if (sT > (uMode > 0.5 ? 40. : 1500.)) job = -7; } }
+    else if (job == 9) {
+      float as = uMode > 0.5 ? 0.06 : 1.;
+      if (k == 0) o1 = clamp((p.y + n.y * 0.5 * as - h) / (0.5 * as), 0., 1.);
+      else { o2 = clamp((p.y + n.y * 4. * as - h) / (4. * as), 0., 1.); job = 0; } }
+    k++;
+    // --- a job has finished: set up the next one
+    if (job == -3) {   // the march is done
+      k = 0;
+      if (uProbe > 0.5) { tm = t; job = 0; }
+      else {
+        if (uGround > 2.5 && uGround < 3.5 && rd.y < 0.) tw = ro.y / -rd.y;
+        if (tw > 0. && (t < 0. || tw < t)) {   // water: waves, rain rings, then the bottom
+          water = true; p = ro + rd * tw; q = p.xz;
+          wv = waves(q, tw); vec3 rp = noised(q * (uMode > 0.5 ? 9. : 1.3) + uTime * 0.4) * (1. - smoothstep(10., 60., tw));   // plus small wind ripples nearby
+          n = normalize(vec3(-wv.x - 0.03 * rp.y, 1., -wv.y - 0.03 * rp.z));
+          if (uMode > 0.5 && uRain > 0.5) {
+            vec2 rip = vec2(0.); vec2 g = floor(q * 4.);
+            for (int yy = -1; yy <= 1; yy++) for (int xx = -1; xx <= 1; xx++) {
+              vec2 o = g + vec2(float(xx), float(yy)); vec2 c = (o + vec2(h21(o), h21(o + 3.1))) / 4.;
+              float ph = fract(uTime * 0.7 + h21(o + 9.)); vec2 dv = q - c; float r = length(dv), R = ph * 0.32;
+              float wr = sin((r - R) * 120.) * exp(-abs(r - R) * 45.) * (1. - ph) * (1. - ph);
+              rip += dv / (r + 1e-3) * wr; }
+            n = normalize(n + vec3(rip.x * 1.3, 0., rip.y * 1.3));
+          }
+          job = 4; }
+        else if (t > 0.) { p = ro + rd * t; rid = gRock; gD = 1.; e = max(0.004, t * 0.0015); job = 5; }
+        else job = 0; } }
+    if (job == -6) {   // start a shadow ray toward star (1 or 2) from so
+      k = 0; job = 7; sRes = 1.; sS0 = uMode > 0.5 ? 0.33 : 1.; sT = 0.03 * sS0;   // close-up: skip millimetre bumps (the normals shade those)
+      sK = clamp(1. / tan(max(sK, 0.004)), 2., 60.);
+      if (sL.y < -0.05) { sRes = 0.; job = -7; } else gD = -1.; }
+    if (job == -7) {   // a shadow ray is done
+      gD = 0.; float shv = sRes <= 0. && sL.y < -0.05 ? 0. : smoothstep(0., 1., clamp(sRes, 0., 1.));
+      if (star == 1) sh1 = shv; else sh2 = shv;
+      k = 0;
+      if (water) job = 0;
+      else if (star == 1 && uS2On > 0.5) { so = p + n * 0.02; sL = uS2Dir; sK = uS2Rad; star = 2; job = -6; }
+      else job = uGround < 4.5 ? 9 : 0;
+      if (job == -6) { k = 0; job = 7; sRes = 1.; sS0 = uMode > 0.5 ? 0.33 : 1.; sT = 0.03 * sS0; sK = clamp(1. / tan(max(sK, 0.004)), 2., 60.);
+        if (sL.y < -0.05) { sRes = 0.; sh2 = 0.; job = uGround < 4.5 ? 9 : 0; } else gD = -1.; } }
+  }
+  gD = 0.;
   if (uProbe > 0.5) {   // probe pass: ground height, slope and forest cover under each candidate animal, and whether a ray from your eye to a point
     // uProbeTop above that ground reaches it past hills, rocks and plants (the same march that draws them, so the answer is exact); read back by the page
-    float k = floor(gl_FragCoord.x); vec4 a = anGet(floor(k * 0.5)); vec2 c = mod(k, 2.) < 0.5 ? a.xy : a.zw; float m;
-    gNoCan = 1.; gEco = 0.; float h = H(c, m), eco = gEco, hx = H(c + vec2(1.5, 0.), m), hz = H(c + vec2(0., 1.5), m); gNoCan = 0.;
-    vec3 tg = vec3(c.x, max(h, 0.) + uProbeTop, c.y), dv = tg - ro; float dist = length(dv), tm = march(ro, dv / dist, m), vis = tm < 0. || tm > dist - 0.6 ? 1. : 0.;
-    float v = floor(clamp((h + 1000.) / 4000., 0., 1.) * 65535.), sl = floor(clamp(length(vec2(hx - h, hz - h)) / 1.5, 0., 1.) * 127.);
+    float vis = tm < 0. || tm > dist - 0.6 ? 1. : 0.;
+    float v = floor(clamp((h0 + 1000.) / 4000., 0., 1.) * 65535.), sl = floor(clamp(length(vec2(hx - h0, hz - h0)) / 1.5, 0., 1.) * 127.);
     gl_FragColor = vec4(floor(v / 256.) / 255., mod(v, 256.) / 255., (sl + 128. * vis) / 255., clamp(eco, 0., 1.)); return; }
-  vec3 col = vec3(0.); float mat = 0.; float t = -1.;
+  vec3 col = vec3(0.);
   if (uUnknown > 0.5) {
     if (rd.y < 0.) { t = ro.y / -rd.y; vec3 p = ro + rd * t; float hatch = step(0.5, fract((p.x + p.z) * 0.25)); col = mix(vec3(0.010), vec3(0.024), hatch); col = mix(col, vec3(0.018), 1. - exp(-t * 0.004)); }
   } else {
-    t = march(ro, rd, mat);
-    float tw = -1.; if (uGround > 2.5 && uGround < 3.5 && rd.y < 0.) tw = ro.y / -rd.y;
-    if (tw > 0. && (t < 0. || tw < t)) {
-      // water: waves, rain rings, Fresnel sky reflection, shallows, surf and floes
-      vec3 p = ro + rd * tw; vec2 q = p.xz;
-      vec3 wv = waves(q, tw), rp = noised(q * (uMode > 0.5 ? 9. : 1.3) + uTime * 0.4) * (1. - smoothstep(10., 60., tw));   // plus small wind ripples nearby
-      vec3 n = normalize(vec3(-wv.x - 0.03 * rp.y, 1., -wv.y - 0.03 * rp.z));
-      if (uMode > 0.5 && uRain > 0.5) {
-        vec2 rip = vec2(0.); vec2 g = floor(q * 4.);
-        for (int yy = -1; yy <= 1; yy++) for (int xx = -1; xx <= 1; xx++) {
-          vec2 o = g + vec2(float(xx), float(yy)); vec2 c = (o + vec2(h21(o), h21(o + 3.1))) / 4.;
-          float ph = fract(uTime * 0.7 + h21(o + 9.)); vec2 dv = q - c; float r = length(dv), R = ph * 0.32;
-          float wv = sin((r - R) * 120.) * exp(-abs(r - R) * 45.) * (1. - ph) * (1. - ph);
-          rip += dv / (r + 1e-3) * wv; }
-        n = normalize(n + vec3(rip.x * 1.3, 0., rip.y * 1.3));
-      }
-      float m2; float depth = -H(q, m2);
-      vec3 rr = refract(rd, n, 0.75); float path = max(0., depth) / max(0.2, -rr.y);   // metres of water on the way to the bottom
-      vec2 qb = q + rr.xz * path; float mb; float db = max(0., -H(qb, mb));
-      float sh = shadow(p + vec3(0, 0.05, 0), uS1Dir, uS1Rad) * cloudShade(p);
+    if (water) {
+      float sh = sh1 * cloudShade(p);
       float fres = 0.02 + 0.98 * pow(1. - max(0., dot(-rd, n)), 5.);
       vec3 rf = reflect(rd, n);
       vec3 refl = skyTex(vec3(rf.x, max(rf.y, 0.01), rf.z)) + sunAdd(rf) * 0.6 * sh;
@@ -493,22 +567,14 @@ void main() {
       if (uLand > -0.5) { float foam = (uCoast > 4.5 && depth < 0.9 ? 0.12 : 1.) * (1. - smoothstep(0., uMode > 0.5 ? 0.1 : 0.7, depth)) * (0.55 + 0.45 * sin(uTime * 1.4 + depth * 9. + fbm3(q * 0.6) * 7.)); col = mix(col, uIceCol * light * 0.9, clamp(foam, 0., 1.) * 0.8); }
       t = tw;
     } else if (t > 0.) {
-      vec3 p = ro + rd * t; float rid = gRock; gD = 1.; vec3 n = nrm(p.xz, t); gD = 0.;
-#if BIO
-      if (mat > 6.5) { float e = 0.015 + t * 0.0006; vec3 nn = vec3(0.);   // a plant: normal from its own shape, sampled at four corners of a tetrahedron;
-        // one call site in a loop (the last pass, at p itself, leaves the plant's details set for shading): every call is a full inlined copy of the
-        // plant code, and the old six-sample normal doubled the time GPU drivers need to compile this shader on first use (20 s to 10 s with ANGLE on Metal)
-        for (int i = 0; i < 5; i++) { vec3 o = i == 0 ? vec3(1., -1., -1.) : i == 1 ? vec3(-1., -1., 1.) : i == 2 ? vec3(-1., 1., -1.) : i == 3 ? vec3(1.) : vec3(0.); nn += o * trees(p + o * e); }
-        n = normalize(nn); }
-#endif
+      float sh = sh1 * cloudShade(p);
       float slope = 1. - n.y;
-      float sh = shadow(p + n * (mat > 3.5 && mat < 4.5 || mat > 5.5 ? 0.8 : 0.02 * (uMode > 0.5 ? 0.1 : 1.)), uS1Dir, uS1Rad) * cloudShade(p);   // foliage: start the shadow ray clear of its own leaves (no banding)
       float mu0 = max(0., dot(n, uS1Dir)), muv = max(0.05, dot(n, -rd));
       vec3 L = uS1Col * (uGround < 1.5 ? mix(2. * mu0 / (mu0 + muv), mu0, uAir) : mu0) * sh;   // airless dust scatters like the Moon's (Lommel–Seeliger): no darkening toward grazing view
-      if (uS2On > 0.5) L += uS2Col * max(0., dot(n, uS2Dir)) * shadow(p + n * 0.02, uS2Dir, uS2Rad);
+      if (uS2On > 0.5) L += uS2Col * max(0., dot(n, uS2Dir)) * sh2;
       vec3 amb = uAmb * (0.5 + 0.5 * n.y) + uBounce * (0.5 - 0.5 * n.y);
       // ambient occlusion from two samples along the normal: crevices and the bases of rocks get less sky and bounce light
-      if (uGround < 4.5) { float m3, as = uMode > 0.5 ? 0.06 : 1.; float o1 = clamp((p.y + n.y * 0.5 * as - H(p.xz + n.xz * 0.5 * as, m3)) / (0.5 * as), 0., 1.), o2 = clamp((p.y + n.y * 4. * as - H(p.xz + n.xz * 4. * as, m3)) / (4. * as), 0., 1.);
+      if (uGround < 4.5) {
         float ao = clamp(0.35 + 0.35 * o1 + 0.3 * o2, 0.25, 1.); amb *= ao; L *= mix(1., ao, 0.25); }
       vec3 alb;
       float var = uMode > 0.5 ? 0.5 + 0.6 * (fbm3(mat2(0.8, -0.6, 0.6, 0.8) * (p.xz + uSeed) * 9.) - 0.5) : 0.6 * fbm3((p.xz + uSeed) / 4.) + 0.4 * fbm3((p.xz + uSeed) / 40.);

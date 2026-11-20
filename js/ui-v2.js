@@ -280,6 +280,15 @@ function placeCategory() {
 
 // ---------- start ----------
 glOK = initGL();
+// a phone may reset the GPU (memory pressure, or a draw that ran too long): keep the context restorable, then rebuild and redraw
+// twice is a device that cannot cope with this view: stop retrying (each retry froze the page) and say so
+let glLost = 0;
+glc.addEventListener("webglcontextlost", e => { glLost++; glOK = false; viewJob++; const n = $("busyNote");
+  if (glLost < 2) { e.preventDefault(); if (n) { n.textContent = "Redrawing…"; n.hidden = false; } return; }
+  if (n) n.hidden = true; ctx2.fillStyle = "#000"; ctx2.fillRect(0, 0, W, H); ctx2.fillStyle = "#c9cdd8"; ctx2.font = "26px IBM Plex Sans, sans-serif";
+  ctx2.fillText("This device's graphics chip could not draw this view.", 40, H / 2 - 16); ctx2.fillStyle = "#8a8a94"; ctx2.font = "22px IBM Plex Sans, sans-serif";
+  ctx2.fillText("The text, numbers and star map still work. Reloading the page tries again.", 40, H / 2 + 22); });
+glc.addEventListener("webglcontextrestored", () => { glOK = initGL(); texScene = null; FAUNA_CACHE.clear(); if (glOK && !$("planet").hidden) draw(); });
 gallery();
 requestAnimationFrame(loop);
 { const h = decodeURIComponent(location.hash.slice(1));

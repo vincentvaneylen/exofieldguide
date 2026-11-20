@@ -1,8 +1,11 @@
 // Progressive views, cache, grid, weather, labels, drawing, zoom
 // ================= Progressive views, a cache, and the grid of all views =================
-// A view appears at once from its grid thumbnail or a quarter-resolution pass, then sharpens: full resolution in three bands,
-// then four jittered passes averaged for anti-aliasing. Each step runs in its own frame so the page stays responsive.
+// A view appears at once from its grid thumbnail or a quarter-resolution pass, then sharpens: a full-resolution pass, then up to four
+// jittered passes averaged for anti-aliasing. Every pass is cut into horizontal strips sized from a measured cost, so each frame asks the
+// GPU for about STRIP_MS of work: the page stays responsive while a slow phone draws, and no single draw call runs long enough for the
+// browser to reset the GPU (iOS does this to calls lasting a few seconds, which left the view stuck on "Drawing…").
 const viewCache = new Map(), gridThumbs = new Map();
+const STRIP_MS = 40, VIEW_CACHE_MAX = matchMedia("(pointer: coarse)").matches ? 8 : 40;   // finished views kept for going back: few on phones, each is megabytes
 const viewKey = (o = {}) => { const z = o.zoom ?? zoom; return [cur.id, si, o.vp ?? vp, z, o.yaw ?? yaw, dial, earthEye ? 1 : 0, life, tod ?? "-", W].join("|"); };
 function show(scale) { const w = glc.width * scale, h = glc.height * scale; ctx2.imageSmoothingEnabled = true; ctx2.imageSmoothingQuality = "high"; ctx2.drawImage(glc, 0, glc.height - h, w, h, 0, 0, W, H);
   if (scene && scene.fauna && !thumbing) { const a = ctx2.globalAlpha; ctx2.globalAlpha = 1; drawFauna(ctx2, scene); ctx2.globalAlpha = a; } }   // animals are drawn over each pass, crisp
@@ -26,23 +29,56 @@ function renderView() {
   // resolution down further on slow devices so a view still sharpens in well under a second
   const setRs = () => { const shown = c2.getBoundingClientRect().width * (window.devicePixelRatio || 1), cap = shown > 0 && shown < W * 0.6 ? Math.max(0.5, Math.min(1, shown * 1.3 / W)) : 1;   // only small phone screens; elsewhere rendering below the canvas size blurs it
     rs = Math.min(cap, est > 2500 ? 0.4 : est > 1500 ? 0.5 : est > 800 ? 0.7 : est > 400 ? 0.8 : est > 200 ? 0.9 : 1); };
-  if (!th) steps.push(() => { probeMs = 0; const t0 = performance.now(), ok = drawGL(T, [0, 0], 0.25, null, s); if (ok) { if (progWarm) { gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px1); est = (performance.now() - t0 - probeMs) * 10; setRs(); } show(0.25); } return ok; });
-  steps.push(() => { if (est) return true; probeMs = 0; const t0 = performance.now(), ok = drawGL(T, [0, 0], 0.5, null, s); if (ok) { gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px1); est = (performance.now() - t0 - probeMs) * 4; setRs(); show(0.5); } return ok; });
-  for (let k = 0; k < 2; k++) steps.push(() => est * rs * rs < 220 ? (k ? true : drawGL(T, [0, 0], rs, null, s) && (show(rs), true)) : drawGL(T, [0, 0], rs, [k, 2], s) && (k < 1 || (show(rs), true)));   // one pass, or two strips if slow
+  // the cost probe is a quarter-resolution image (a sixteenth of the pixels). A program's first draw also pays for driver set-up, so that
+  // draw is not timed: the probe simply runs again
+  const probe = () => { probeMs = 0; const t0 = performance.now(), ok = drawGL(T, [0, 0], 0.25, null, s); if (!ok) return false;
+    if (!progWarm) return "again"; gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px1); est = (performance.now() - t0 - probeMs) * 10; setRs(); if (!th) show(0.25); return true; };
+  steps.push(probe);
+  // one pass (plain or jittered) as a run of strips; returns "again" until its last strip is drawn, then copies the result
+  const pass = (jit, onDone) => { let k = 0, n = 0; return () => {
+    if (!n) n = Math.max(1, Math.min(32, Math.ceil(est * rs * rs / STRIP_MS)));
+    if (!drawGL(T, jit, rs, n > 1 ? [k, n] : null, s)) return false;
+    gl.flush(); if (++k < n) return "again"; onDone(); return true; }; };
+  steps.push(pass([0, 0], () => show(rs)));
   // smoothing passes are averaged on the 2D canvas, not by GL blending: switching blending on makes some GPU drivers (ANGLE on Metal) build a
   // second pipeline for the program, which for the larger shaders stalled the first smoothing pass for 20 s or more
-  AA.forEach((j, k) => steps.push(() => { if (k >= (est * rs * rs > 110 ? 1 : est * rs * rs > 55 ? 2 : 4)) return true; const ok = drawGL(T, j, rs, null, s); if (ok) { ctx2.globalAlpha = 1 / (k + 2); show(rs); ctx2.globalAlpha = 1; } return ok; }));
+  AA.forEach((j, k) => { const p = pass(j, () => { ctx2.globalAlpha = 1 / (k + 2); show(rs); ctx2.globalAlpha = 1; });
+    steps.push(() => k >= (est * rs * rs > 110 ? 1 : est * rs * rs > 55 ? 2 : 4) ? true : p()); });
   let i = 0, waited = false;
   const run = () => {
-    if (id !== viewJob) return;
-    if (steps[i]()) i++;
-    else if (!waited && !th) { waited = true; ctx2.fillStyle = "#000"; ctx2.fillRect(0, 0, W, H); ctx2.fillStyle = "#8a8a94"; ctx2.font = "22px IBM Plex Sans, sans-serif"; ctx2.fillText("Preparing this kind of world: the first time takes a few seconds…", 40, H - 40); }
+    if (id !== viewJob || !glOK) return;
+    const r = steps[i]();
+    if (r === true) i++;
+    else if (r === false && !waited && !th) { waited = true; ctx2.fillStyle = "#000"; ctx2.fillRect(0, 0, W, H); ctx2.fillStyle = "#8a8a94"; ctx2.font = "22px IBM Plex Sans, sans-serif"; ctx2.fillText("Preparing this kind of world: the first time takes a few seconds…", 40, H - 40); }
     if (i < steps.length) { requestAnimationFrame(run); return; }
     const c = document.createElement("canvas"), cw = Math.round(glc.width * rs), ch = Math.round(glc.height * rs); c.width = cw; c.height = ch; const cx = c.getContext("2d"); cx.imageSmoothingQuality = "high"; cx.drawImage(c2, 0, 0, W, H, 0, 0, cw, ch);   // the averaged image lives on the 2D canvas
-    viewCache.set(key, c); if (viewCache.size > 40) viewCache.delete(viewCache.keys().next().value);
+    viewCache.set(key, c); if (viewCache.size > VIEW_CACHE_MAX) viewCache.delete(viewCache.keys().next().value);
     viewDone = true; if (note) note.hidden = true; renderGrid();
+    if (s.faunaPending && !s.fauna) placeFaunaSoon(s, id, key);
+    if (s.bioFailed && note) { note.textContent = "This device could not draw the imagined life, so the world is shown without it."; note.hidden = false;
+      setTimeout(() => { if (viewDone) note.hidden = true; note.textContent = "Drawing…"; }, 6000); }
   };
   requestAnimationFrame(run);
+}
+// Animals and painted plants: placeFauna asks the shader's probe about ~1,700 spots around you. Its random numbers do not depend on the
+// answers until it has asked all of them, so a dry run first records exactly which spots it will ask about; those are answered a few GPU
+// batches per frame, so the page stays responsive; then placeFauna runs again on the recorded answers, giving the same placement as before.
+// The finished view is shown without them meanwhile, and they are painted on (and the cached view updated) when ready.
+function placeFaunaSoon(s, id, key) {
+  const calls = []; try { placeFauna(s, (pts, top = 1) => { calls.push({ pts, top }); return pts.map(() => ({ h: 0, slope: 0, seen: false, eco: 0 })); }); } catch (e) { return; }
+  const ans = calls.map(() => []), CH = AN_MAX * 4, note = $("busyNote"); let ci = 0, pi = 0;
+  if (note) { note.textContent = "Adding life…"; note.hidden = false; }
+  const step = () => {
+    if (id !== viewJob || scene !== s || !glOK) { if (note && id !== viewJob) note.textContent = "Drawing…"; return; }
+    const ok = drawGL(4000, [0, 0], 1, null, s, pg => { const c = calls[ci]; ans[ci].push(...pg(c.pts.slice(pi, pi + CH), c.top)); pi += CH; if (pi >= c.pts.length) { ci++; pi = 0; } });
+    if (ok && ci < calls.length) { requestAnimationFrame(step); return; }
+    if (!ok) { requestAnimationFrame(step); return; }
+    let k = 0; s.fauna = placeFauna(s, () => ans[k++]); FAUNA_CACHE.set(s.faunaKey, s.fauna); s.faunaPending = false;
+    ctx2.globalAlpha = 1; drawFauna(ctx2, s);
+    const c = viewCache.get(key); if (c) { const cx = c.getContext("2d"); cx.imageSmoothingQuality = "high"; cx.drawImage(c2, 0, 0, W, H, 0, 0, c.width, c.height); }
+    if (note) { note.hidden = true; note.textContent = "Drawing…"; }
+  };
+  requestAnimationFrame(step);
 }
 function renderGrid() {}   // v1 drew a grid of every view here; in v2 the globe is how you change place
 function sceneLabels() {
