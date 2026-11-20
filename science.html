@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Checks</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css?v=10">
+<style>html, body { height: auto; } body { margin: 0; overflow: auto; } :root { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); } [hidden] { display: none !important; }</style>
+</head>
+<body class="doc">
+<header class="dochead gut"><a class="mono brand" href="./">EXOPLANET FIELD GUIDE</a><nav class="topnav" aria-label="Pages"><a href="./">Home</a><a href="recipe.html">How a picture is made</a><a href="refs.html">References</a><a href="about.html">About</a></nav></header>
+<main class="docmain gut">
+  <h1>Checks</h1>
+  <p class="lede">This page runs the guide's own tests. Readers will find the results explained under step 17 of <a href="recipe.html#step17">How a picture is made</a>.</p>
+  <pre id="out" style="white-space:pre-wrap;font:13px var(--f-mono)">Running…</pre>
+</main>
+<div hidden><canvas id="gl" width="16" height="16"></canvas><canvas id="c2" width="16" height="16"></canvas><canvas id="fx" width="16" height="16"></canvas><canvas id="lab" width="16" height="16"></canvas></div>
+<script src="js/shader-terrain.js"></script>
+<script src="js/core-colour.js"></script>
+<script src="js/data-findings.js"></script>
+<script src="js/data-worlds-hand.js"></script>
+<script src="js/physics-worlds-auto.js"></script>
+<script src="js/data-samples.js"></script>
+<script src="js/data-literature.js"></script>
+<script src="js/data-catalogue.js"></script>
+<script src="js/physics-derived.js"></script>
+<script src="js/physics-giants.js"></script>
+<script src="js/scene-recipe.js"></script>
+<script src="js/scene-animals.js"></script>
+<script src="js/core-categories.js"></script>
+<script src="js/lab-benchmarks.js"></script>
+<script src="js/lab-consistency.js"></script>
+<script src="js/ui-state.js"></script>
+<script src="js/render-globe.js"></script>
+<script src="js/render-terrain.js"></script>
+<script src="js/ui-notes.js"></script>
+<script src="js/data-review.js"></script>
+<script src="js/data-review-plain.js"></script>
+<script src="js/ui-about.js"></script>
+<script src="js/ui-describe.js"></script>
+<script src="js/data-refs.js"></script>
+<script src="js/ui-refs.js"></script>
+<script src="js/ui-words.js"></script>
+<script src="js/data-records.js"></script>
+<script src="js/data-context.js"></script>
+<script src="js/core-records.js"></script>
+<script src="js/ui-trace.js"></script>
+<script>
+let tintCache = null;
+const normName = n => n.toLowerCase().replace(/[\s\-_'’.]/g, ""), CAT_NORM = new Map(CAT.map(r => [normName(r[0]), r[0]]));
+</script>
+<script src="js/lab-text.js"></script>
+<script>
+setTimeout(() => {
+  const b = runBenchmarks(), c = consistencyReport(), t = typeof textReport === "function" ? textReport() : null;
+  document.getElementById("out").textContent = `runBenchmarks(): ${b.filter(r => r.ok).length} of ${b.length} pass\nconsistencyReport(): ${JSON.stringify(c.counts)}\ntextReport(): ${t ? JSON.stringify(t.counts) : "not loaded"}\n\n` + b.filter(r => !r.ok).map(r => `FAIL ${r.p}: ${r.test} (${r.got} vs ${r.want})`).join("\n") + (t ? "\n" + JSON.stringify(t.examples, null, 1) : "");
+}, 50);
+</script>
+</body>
+</html>

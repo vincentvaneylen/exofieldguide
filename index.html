@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Exoplanet Field Guide</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css?v=10">
+<style>:root { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); } body { margin: 0; } img { max-width: 100%; } [hidden] { display: none !important; }</style>
+</head>
+<body>
+<!-- ======== the front door: showcase worlds, search, the star map ======== -->
+<section id="gallery" class="gut" aria-label="Choose a world">
+  <div class="g-in">
+    <div class="g-head">
+      <div class="g-top"><span class="mono" style="color:var(--accent)">EXOPLANET FIELD GUIDE</span><nav class="topnav" aria-label="Pages"><a href="./" aria-current="page">Home</a><a href="recipe.html">How a picture is made</a><a href="refs.html">References</a><a href="about.html">About</a></nav></div>
+      <h1>What would you see if you stood there?</h1>
+      <p>Pictures of real planets round other stars, built from what telescopes have measured. Where the measurements stop, the guide says so, shows each world the planet could be, and marks what is imagined.</p>
+    </div>
+    <div class="g-tools">
+      <label class="search"><span aria-hidden="true">⌕</span><input id="q" list="q-list" autocomplete="off" spellcheck="false" placeholder="Search every known planet, for example WASP-17 b" aria-label="Search all known planets"></label>
+      <datalist id="q-list"></datalist>
+      <button class="chip" type="button" id="randBtn">Random planet</button>
+      <button class="chip" type="button" id="mapBtn">Star map</button>
+
+    </div>
+    <p class="qmsg" id="qmsg" aria-live="polite"></p>
+    <h2 class="g-sub">30 planets to start with</h2>
+    <div class="g-tools" role="group" aria-label="Sort these 30 planets" id="filters"></div>
+    <div class="cards" id="cards"></div>
+    <p class="g-foot">The search above reaches all <span id="catN"></span>. Their sizes, masses and orbits come from the <a href="https://exoplanetarchive.ipac.caltech.edu" target="_blank" rel="noopener">NASA Exoplanet Archive</a>. <a href="recipe.html">How a picture is made</a> gives every step from those numbers to a picture.</p>
+  </div>
+</section>
+
+<!-- ======== the star map ======== -->
+<div class="map" id="map" hidden role="dialog" aria-label="Star map">
+  <div class="map-in gut">
+    <div class="map-top">
+      <h2>Star map</h2>
+      <div class="seg" id="sky-mode" role="group" aria-label="Map"><button type="button" data-m="sky" aria-pressed="true">Our sky</button><button type="button" data-m="3d" aria-pressed="false">Around the Sun (3D)</button></div>
+      <button class="btn" type="button" id="mapX">Close</button>
+    </div>
+    <div class="skywrap"><canvas id="sky" width="1400" height="700" role="img" aria-label="Map of the host stars of known exoplanets"></canvas><div class="skytip" id="skytip" hidden></div></div>
+    <p class="skynote" id="skynote"></p>
+  </div>
+</div>
+
+<!-- ======== one planet ======== -->
+<section id="planet" hidden aria-label="Planet view">
+  <div class="stage" id="stage">
+    <div class="views" id="views">
+      <canvas id="gl" width="1024" height="576" aria-hidden="true"></canvas>
+      <canvas id="c2" width="1280" height="720" role="img" aria-label="The view"></canvas>
+      <canvas id="fx" width="1280" height="720" aria-hidden="true"></canvas>
+      <canvas id="lab" width="1280" height="720" aria-hidden="true"></canvas>
+    </div>
+    <div class="scrim-t"></div><div class="scrim-b"></div>
+    <button class="turn l" type="button" id="turnL" aria-label="Turn left 45°" title="Turn left (← key)">‹</button>
+    <button class="turn r" type="button" id="turnR" aria-label="Turn right 45°" title="Turn right (→ key)">›</button>
+    <div class="lookchip" id="lookchip"></div>
+    <div class="busy mono" id="busyNote" hidden aria-live="polite">Drawing…</div>
+    <div class="why" id="why" hidden></div>
+  </div>
+
+  <header class="top gut">
+    <div class="who-wrap">
+      <nav class="crumbs mono" aria-label="Where you are" id="crumbs"></nav>
+      <div class="who"><h1 id="pname"></h1><p id="phook"></p></div>
+    </div>
+    <div class="topbtns"><button class="btn" type="button" id="shareBtn" aria-haspopup="true" aria-expanded="false">Share</button><button class="btn" type="button" id="aboutBtn"><span class="lg">About this planet</span><span class="sm">About</span></button>
+      <div class="sharepop" id="sharePop" hidden><button class="btn" type="button" id="copyLink">Copy link to this view</button><button class="btn" type="button" id="savePost" hidden>Save a postcard</button><p class="src" id="shareMsg" aria-live="polite"></p></div></div>
+  </header>
+
+  <div class="dock gut" id="dock">
+    <div class="where" id="whereBox">
+      <h2 id="whereH">Where you stand</h2>
+      <div class="globebox">
+        <canvas class="globe" id="globeSmall" width="300" height="300" aria-label="Small globe: click a numbered place to stand there"></canvas>
+        <div class="places" id="places" role="group" aria-label="Places"></div>
+      </div>
+      <button class="zoomout" type="button" id="seePlanet">⤢ See the whole planet</button>
+    </div>
+    <div class="mid">
+      <div class="caption" id="caption" aria-live="polite"></div>
+      <div class="levelbtns" id="levelBtns"></div>
+      <div class="worlds" id="worldsBox"><h2>The worlds shown</h2><div class="wrow" id="worlds" role="group" aria-label="The worlds shown"></div></div>
+    </div>
+    <div class="switches" id="switches">
+      <button class="btn" type="button" id="realBtn" aria-pressed="false" title="Show only what is measured, or calculated from measurements">What's real?</button>
+      <button class="btn" type="button" id="lifeBtn" aria-pressed="false">Imagine life</button>
+      <p class="whynot" id="lifeWhy"></p>
+    </div>
+  </div>
+</section>
+
+<!-- ======== about this planet: overview, why it looks like this, technical summary, references (js/ui-panel.js) ======== -->
+<aside class="drawer gut" id="drawer" aria-label="About this planet" hidden>
+  <div class="phead"><span class="mono kicker">About this planet</span><button class="x" type="button" id="drawerX" aria-label="Close">×</button></div>
+  <div id="panelIn"></div>
+</aside>
+
+<script src="js/shader-terrain.js"></script>
+<script src="js/core-colour.js"></script>
+<script src="js/data-findings.js"></script>
+<script src="js/data-worlds-hand.js"></script>
+<script src="js/physics-worlds-auto.js"></script>
+<script src="js/data-samples.js"></script>
+<script src="js/data-literature.js"></script>
+<script src="js/data-catalogue.js"></script>
+<script src="js/physics-derived.js"></script>
+<script src="js/physics-giants.js"></script>
+<script src="js/scene-recipe.js"></script>
+<script src="js/scene-animals.js"></script>
+<script src="js/core-categories.js"></script>
+<script src="js/lab-benchmarks.js"></script>
+<script src="js/ui-state.js"></script>
+<script src="js/render-system.js"></script>
+<script src="js/render-globe.js"></script>
+<script src="js/render-terrain.js"></script>
+<script src="js/render-fauna.js"></script>
+<script src="js/render-views.js"></script>
+<script src="js/ui-notes.js"></script>
+<script src="js/data-review.js"></script>
+<script src="js/data-review-plain.js"></script>
+<script src="js/ui-story.js"></script>
+<script src="js/ui-correct.js"></script>
+<script src="js/ui-about.js"></script>
+<script src="js/ui-panel.js"></script>
+<script src="js/ui-share.js"></script>
+<script src="js/ui-describe.js"></script>
+<script src="js/data-refs.js"></script>
+<script src="js/ui-refs.js"></script>
+<script src="js/ui-words.js"></script>
+<script src="js/data-records.js"></script>
+<script src="js/data-context.js"></script>
+<script src="js/core-records.js"></script>
+<script src="js/ui-trace.js"></script>
+<script src="js/ui-why.js"></script>
+<script src="js/ui-skymap.js"></script>
+<script src="js/ui-space3d.js"></script>
+<script src="js/ui-v2.js"></script>
+</body>
+</html>

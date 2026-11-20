@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>References</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css?v=10">
+<style>html, body { height: auto; } body { margin: 0; overflow: auto; } :root { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); } [hidden] { display: none !important; }</style>
+</head>
+<body class="doc">
+<header class="dochead gut"><a class="mono brand" href="./">EXOPLANET FIELD GUIDE</a><nav class="topnav" aria-label="Pages"><a href="./">Home</a><a href="recipe.html">How a picture is made</a><a href="refs.html" aria-current="page">References</a><a href="about.html">About</a></nav></header>
+<main class="docmain gut">
+  <p class="mono q">Which papers does the guide rely on?</p>
+  <h1>References</h1>
+  <p class="lede">Every paper cited anywhere in the guide has one entry here, and every citation links to it. Each entry gives the authors, year, title and journal as arXiv or the NASA Astrophysics Data System records them, a link to the paper, and the planets it is cited for.</p>
+  <label class="search"><span aria-hidden="true">⌕</span><input id="fq" autocomplete="off" spellcheck="false" placeholder="Filter by author, year, word or planet" aria-label="Filter the references"></label>
+  <h2>Papers on planets and on the rules <span class="count" id="nMain"></span></h2>
+  <ol class="reflist" id="rMain"></ol>
+  <h2>Cited in the text, not yet matched to a record <span class="count" id="nUn"></span></h2>
+  <p class="hint">These citations come from the guide's notes. The search link looks for the paper; until it is matched, treat the citation with care.</p>
+  <ol class="reflist" id="rUn"></ol>
+  <h2>Discovery papers <span class="count" id="nDisc"></span></h2>
+  <p class="hint">The paper that announced each planet, as the NASA Exoplanet Archive records it.</p>
+  <details id="discBox"><summary>Show all discovery papers</summary><ol class="reflist" id="rDisc"></ol></details>
+</main>
+<script src="js/data-catalogue.js"></script>
+<script src="js/data-refs.js"></script>
+<script>
+const $ = id => document.getElementById(id), esc = s => (s || "").replace(/&(?!\w+;)/g, "&amp;").replace(/</g, "&lt;");
+const sortKey = r => (r.cite || r.authors || "").normalize("NFD").replace(/[^\w ]/g, "").toLowerCase() + (r.year || "");
+const out = u => u ? ` <a href="${u}" target="_blank" rel="noopener">${/arxiv\.org/.test(u) ? "arXiv" : /adsabs/.test(u) ? "ADS" : "Paper"} ↗</a>` : "";
+const forP = ps => ps && ps.filter(Boolean).length ? ` <span class="for">Cited for ${ps.filter(Boolean).slice(0, 6).map(p => `<a href="./#pl-${encodeURIComponent(p.toLowerCase().replace(/[\s\-_'’.]/g, ""))}">${esc(p)}</a>`).join(", ")}${ps.length > 6 ? " and others" : ""}.</span>` : "";
+const main = Object.entries(REFLIST).sort((a, b) => sortKey(a[1]) < sortKey(b[1]) ? -1 : 1);
+$("rMain").innerHTML = main.map(([k, r]) => `<li id="${k}"><b>${esc(r.cite)}.</b> ${r.kind === "paper" ? `${esc(r.authors)} ${r.year}. <i>${esc(r.title)}</i>.${r.journal ? " " + esc(r.journal.replace(/\.$/, "")) + "." : ""}` : r.what ? `${r.kind === "discovery" ? "Discovery paper" : "On " + esc(r.what)}.` : ""}${out(r.url)}${forP(r.planets)}</li>`).join("");
+$("nMain").textContent = main.length;
+const un = new Map(); for (const [c, p] of REF_UNRESOLVED) { if (!un.has(c)) un.set(c, []); if (p) un.get(c).push(p); }
+const slug = c => "u-" + c.normalize("NFD").replace(/[^\w]+/g, "-").replace(/^-|-$/g, "").toLowerCase();
+$("rUn").innerHTML = [...un.entries()].sort().map(([c, ps]) => `<li id="${slug(c)}"><b>${esc(c)}.</b> <a href="https://ui.adsabs.harvard.edu/search/q=${encodeURIComponent(`author:"^${c.split(/ et al| &| and /)[0].split(" ").pop()}" year:${(c.match(/\d{4}/) || [""])[0]}`)}" target="_blank" rel="noopener">Search ADS ↗</a>${forP(ps)}</li>`).join("");
+$("nUn").textContent = un.size;
+const disc = new Map(); for (const r of CAT) { if (!r[18]) continue; const k = "ads" + r[18].replace(/[^A-Za-z0-9]/g, ""), e = disc.get(k); if (e) e.p.push(r[0]); else disc.set(k, { ref: r[17], bib: r[18], p: [r[0]] }); }
+$("nDisc").textContent = disc.size;
+let discDone = false;
+function fillDisc() { if (discDone) return; discDone = true; $("rDisc").innerHTML = [...disc.entries()].sort((a, b) => a[1].ref < b[1].ref ? -1 : 1).map(([k, d]) => `<li id="${k}"><b>${d.ref}.</b> Discovery of ${esc(d.p.slice(0, 4).join(", "))}${d.p.length > 4 ? ` and ${d.p.length - 4} more` : ""}. <a href="https://ui.adsabs.harvard.edu/abs/${encodeURIComponent(d.bib)}/abstract" target="_blank" rel="noopener">ADS ↗</a></li>`).join(""); }
+$("discBox").addEventListener("toggle", fillDisc);
+function goHash() { const h = decodeURIComponent(location.hash.slice(1)); if (!h) return; if (/^ads/.test(h)) { fillDisc(); $("discBox").open = true; } const el = document.getElementById(h); if (el) { el.scrollIntoView({ block: "center" }); document.querySelectorAll(".reflist li.hit").forEach(x => x.classList.remove("hit")); el.classList.add("hit"); } }
+addEventListener("hashchange", goHash); goHash();
+$("fq").oninput = e => { const q = e.target.value.trim().toLowerCase(); if (q) { fillDisc(); $("discBox").open = true; } document.querySelectorAll(".reflist li").forEach(li => li.hidden = !!q && !li.textContent.toLowerCase().includes(q)); };
+</script>
+</body>
+</html>

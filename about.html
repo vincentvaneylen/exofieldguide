@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>About the Guide</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css?v=10">
+<style>html, body { height: auto; } body { margin: 0; overflow: auto; } :root { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); } [hidden] { display: none !important; }</style>
+</head>
+<body class="doc">
+<header class="dochead gut"><a class="mono brand" href="./">EXOPLANET FIELD GUIDE</a><nav class="topnav" aria-label="Pages"><a href="./">Home</a><a href="recipe.html">How a picture is made</a><a href="refs.html">References</a><a href="about.html" aria-current="page">About</a></nav></header>
+<main class="docmain gut">
+  <p class="mono q">What is this, who made it, and how far should I trust it?</p>
+  <h1>About the guide</h1>
+  <h2>Who made it, and why</h2>
+  <p>The Exoplanet Field Guide is made by Vincent Van Eylen, Professor of Astrophysics at University College London's Mullard Space Science Laboratory, where he leads a research team that studies exoplanets: finding new ones, measuring how large and how massive they are, and working out what they are made of and how they formed.</p>
+  <p>The guide exists to let you dream, while staying true to the science. Imagination is part of how science works: every measurement in astronomy starts with someone wondering what a place is like. Here you can stand on thousands of real worlds and look around. Everything you see starts from what has been measured, follows rules that are written down, and tells you honestly where the evidence ends and imagination begins.</p>
+  <h2>What it is</h2>
+  <p>The guide draws what you might see standing on, or floating above, each of the planets known round other stars. It starts from the few numbers telescopes have measured, usually a planet's size, its mass and its orbit, and works forward by stated rules to a sky, a ground and a temperature.</p>
+  <p>For most planets nobody has observed anything beyond those numbers. The guide then shows the kinds of world the planet could be, and says plainly that they are predictions. Where a telescope has looked at a planet's air, its surface or its heat, the guide says what it saw, shows the world that fits, and cites the paper.</p>
+  <h2>How far to trust a picture</h2>
+  <p>Every picture mixes four kinds of thing, and the guide keeps them apart with four words:</p>
+  <ul class="words">
+    <li><span class="srcw s0">measured</span> Read off a telescope observation of this planet or its star.</li>
+    <li><span class="srcw s1">calculated</span> Follows from measured numbers by a stated rule, such as the star's size in the sky.</li>
+    <li><span class="srcw s2">assumed</span> A choice the guide makes because nothing measures it, such as the air pressure of a world nobody has observed.</li>
+    <li><span class="srcw s3">imagined</span> Decoration with no evidence either way: the shapes of hills and clouds, moons, rings, and all life.</li>
+  </ul>
+  <p>The button <b>What's real?</b> on any planet strips the picture back to what is measured or calculated. The planet's panel marks each number with one of the four words.</p>
+  <p>No picture here is a photograph, and none should be read as one. Even a planet that telescopes have studied closely is drawn mostly from calculation and imagination: an observation can settle what kind of world it is, but no telescope can yet see the hills of a planet round another star.</p>
+  <h2>Where to look for what</h2>
+  <ul>
+    <li><b>A planet's panel</b> (“About this planet”) tells you what the planet is, what has been observed and how, which worlds are shown and why, and why each part of the picture looks as it does.</li>
+    <li><b><a href="recipe.html">How a picture is made</a></b> gives every rule, in 17 steps, with the numbers. Choose a planet there to follow its own picture step by step. The last step lists the tests of the rules against well-studied planets.</li>
+    <li><b><a href="refs.html">References</a></b> lists every paper the guide cites.</li>
+  </ul>
+  <h2>Where the numbers come from</h2>
+  <p>Sizes, masses and orbits come from the <a href="https://exoplanetarchive.ipac.caltech.edu" target="_blank" rel="noopener">NASA Exoplanet Archive ↗</a>: <span id="aCat"></span>. What telescopes have observed beyond those numbers comes from published papers. The papers on every planet were searched and screened, and those that report observations of a planet's air, surface or heat were read; how deeply depends on the planet, and the best-studied ones are being read in more depth. The literature was last searched on <span id="aLit"></span>.</p>
+  <h2>Thank you</h2>
+  <p>This guide would not be possible without the <a href="https://exoplanetarchive.ipac.caltech.edu" target="_blank" rel="noopener">NASA Exoplanet Archive ↗</a>, run by the NASA Exoplanet Science Institute at Caltech/IPAC. Its team gathers every confirmed planet into one carefully checked, openly available catalogue, keeps it up to date as new papers appear, and makes it free for anyone to use. Every one of the planets here begins as a line in that table.</p>
+  <p>Behind each line are the people who found and measured the planet: thousands of astronomers, and the engineers, technicians and software teams who designed, built and operate the instruments they use, from ground-based spectrographs and survey cameras to Kepler, TESS, CHEOPS, Spitzer, Hubble and JWST. Many of these planets took years of observing, and careful work by large teams, before they could be confirmed. Every view in this guide rests on that work, and is a small tribute to it.</p>
+  <h2>What is left out</h2>
+  <p>Planets of pulsars, planets with no known orbit, and planets that drift without a star are not drawn. Moons are only ever shown in the sky, never as ground to stand on. The pictures do not show seasons, weather that changes, or the view at different points of a stretched orbit.</p>
+  <h2>How it was built</h2>
+  <p>It was built with Claude, an AI model made by Anthropic, which wrote most of the code and read the papers on each planet. Every finding is cited where it is used, so any of it can be checked against the original paper. If something is wrong or missing, use “Suggest a correction” at the foot of any planet's panel.</p>
+  <p class="hint">Version 4, November 2026.</p>
+</main>
+<script src="js/data-catalogue.js"></script>
+<script src="js/data-review.js"></script>
+<script>
+document.getElementById("aCat").textContent = `${CAT.length.toLocaleString()} planets as downloaded on ${CAT_DATE}`;
+{ const d = Object.values(REVIEW).map(x => x[0]).filter(Boolean).sort().pop(); document.getElementById("aLit").textContent = d ? new Date(2000 + +d.slice(0, 2), +d.slice(2, 4) - 1, +d.slice(4, 6)).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) : "the date in the catalogue"; }
+</script>
+</body>
+</html>

@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>How a Picture Is Made</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css?v=10">
+<style>html, body { height: auto; } body { margin: 0; overflow: auto; } :root { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); } [hidden] { display: none !important; }</style>
+</head>
+<body class="doc">
+<header class="dochead gut"><a class="mono brand" href="./">EXOPLANET FIELD GUIDE</a><nav class="topnav" aria-label="Pages"><a href="./">Home</a><a href="recipe.html" aria-current="page">How a picture is made</a><a href="refs.html">References</a><a href="about.html">About</a></nav></header>
+<main class="docmain wide gut">
+  <p class="mono q">Exactly what goes into a picture, step by step?</p>
+  <h1>How a picture is made</h1>
+  <p class="lede">Every picture in the guide comes from the same 17 steps, run in this order. Each step says what goes in, the rule with its numbers, what comes out, when an observation replaces the rule, and how far to trust it. This is the only place the rules are written down; every other page links here.</p>
+  <p class="lede">Four words say where a number comes from. <span class="srcw s0">measured</span>: read off a telescope observation. <span class="srcw s1">calculated</span>: worked out from measured numbers by a stated rule. <span class="srcw s2">assumed</span>: chosen because nothing measures it. <span class="srcw s3">imagined</span>: decoration with no evidence either way.</p>
+  <div class="rpick">
+    <label class="search"><span aria-hidden="true">⌕</span><input id="rq" list="rq-list" autocomplete="off" spellcheck="false" placeholder="A planet's name, for example TOI-700 d" aria-label="Choose a planet"></label><datalist id="rq-list"></datalist>
+    <button class="chip" type="button" data-ex="t270d">TOI-270 d</button><button class="chip" type="button" data-ex="lhs3844">LHS 3844 b</button><button class="chip" type="button" data-ex="WASP-43 b">WASP-43 b</button><button class="chip" type="button" data-ex="Earth">Earth</button>
+  </div>
+  <p class="hint" id="rmsg" aria-live="polite"></p>
+  <p id="rWho" class="rwho"></p>
+  <nav class="rtoc" aria-label="Steps" id="rtoc"></nav>
+  <div id="rsteps"></div>
+</main>
+<div hidden><canvas id="gl" width="16" height="16"></canvas><canvas id="c2" width="16" height="16"></canvas><canvas id="fx" width="16" height="16"></canvas><canvas id="lab" width="16" height="16"></canvas></div>
+<script src="js/shader-terrain.js"></script>
+<script src="js/core-colour.js"></script>
+<script src="js/data-findings.js"></script>
+<script src="js/data-worlds-hand.js"></script>
+<script src="js/physics-worlds-auto.js"></script>
+<script src="js/data-samples.js"></script>
+<script src="js/data-literature.js"></script>
+<script src="js/data-catalogue.js"></script>
+<script src="js/physics-derived.js"></script>
+<script src="js/physics-giants.js"></script>
+<script src="js/scene-recipe.js"></script>
+<script src="js/scene-animals.js"></script>
+<script src="js/core-categories.js"></script>
+<script src="js/lab-benchmarks.js"></script>
+<script src="js/lab-consistency.js"></script>
+<script src="js/ui-state.js"></script>
+<script src="js/render-globe.js"></script>
+<script src="js/render-terrain.js"></script>
+<script src="js/ui-notes.js"></script>
+<script src="js/data-review.js"></script>
+<script src="js/data-review-plain.js"></script>
+<script src="js/ui-about.js"></script>
+<script src="js/ui-describe.js"></script>
+<script src="js/data-refs.js"></script>
+<script src="js/ui-refs.js"></script>
+<script src="js/ui-words.js"></script>
+<script src="js/data-records.js"></script>
+<script src="js/data-context.js"></script>
+<script src="js/core-records.js"></script>
+<script src="js/ui-trace.js"></script>
+<script>
+let tintCache = null;
+const normName = n => n.toLowerCase().replace(/[\s\-_'’.]/g, ""), CAT_NORM = new Map(CAT.map(r => [normName(r[0]), r[0]]));
+</script>
+<script src="js/ui-recipe.js"></script>
+<script>
+document.getElementById("rtoc").innerHTML = STEP_TITLES.map((t, n) => n ? `<a href="#step${n}">${n}. ${t}</a>` : "").join("");
+recipeStart();
+</script>
+</body>
+</html>
